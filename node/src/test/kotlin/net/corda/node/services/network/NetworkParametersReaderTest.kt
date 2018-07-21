@@ -56,7 +56,7 @@ class NetworkParametersReaderTest {
         val oldParameters = testNetworkParameters(epoch = 1)
         NetworkParametersCopier(oldParameters).install(baseDirectory)
         NetworkParametersCopier(server.networkParameters, update = true).install(baseDirectory) // Parameters update file.
-        val parameters = NetworkParametersReader(DEV_ROOT_CA.certificate, networkMapClient, baseDirectory).networkParameters
+        val parameters = NetworkParametersReader(DEV_ROOT_CA.certificate, networkMapClient, baseDirectory).read().networkParameters
         assertFalse((baseDirectory / NETWORK_PARAMS_UPDATE_FILE_NAME).exists())
         assertEquals(server.networkParameters, parameters)
         // Parameters from update should be moved to `network-parameters` file.
@@ -72,7 +72,7 @@ class NetworkParametersReaderTest {
         val baseDirectory = fs.getPath("/node").createDirectories()
         val fileParameters = testNetworkParameters(epoch = 1)
         NetworkParametersCopier(fileParameters).install(baseDirectory)
-        val parameters = NetworkParametersReader(DEV_ROOT_CA.certificate, networkMapClient, baseDirectory).networkParameters
+        val parameters = NetworkParametersReader(DEV_ROOT_CA.certificate, networkMapClient, baseDirectory).read().networkParameters
         assertThat(parameters).isEqualTo(fileParameters)
     }
 

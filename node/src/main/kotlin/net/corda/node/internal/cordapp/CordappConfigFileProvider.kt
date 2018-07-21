@@ -2,7 +2,6 @@ package net.corda.node.internal.cordapp
 
 import com.typesafe.config.Config
 import com.typesafe.config.ConfigFactory
-import net.corda.core.internal.createDirectories
 import net.corda.core.internal.div
 import net.corda.core.internal.exists
 import net.corda.core.internal.isDirectory
@@ -15,10 +14,6 @@ class CordappConfigFileProvider(private val configDir: Path = DEFAULT_CORDAPP_CO
         val DEFAULT_CORDAPP_CONFIG_DIR = Paths.get("cordapps") / "config"
         const val CONFIG_EXT = ".conf"
         val logger = contextLogger()
-    }
-
-    init {
-        configDir.createDirectories()
     }
 
     override fun getConfigByName(name: String): Config {

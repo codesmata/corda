@@ -48,11 +48,8 @@ import javax.persistence.*
 class NodeAttachmentService(
         metrics: MetricRegistry,
         attachmentContentCacheSize: Long = NodeConfiguration.defaultAttachmentContentCacheSize,
-        attachmentCacheBound: Long = NodeConfiguration.defaultAttachmentCacheBound,
-        private val database: CordaPersistence
-) : AttachmentStorage, SingletonSerializeAsToken(
-) {
-
+        attachmentCacheBound: Long = NodeConfiguration.defaultAttachmentCacheBound
+) : AttachmentStorage, SingletonSerializeAsToken() {
     companion object {
         private val log = contextLogger()
 
@@ -105,10 +102,11 @@ class NodeAttachmentService(
 
     @VisibleForTesting
     var checkAttachmentsOnLoad = true
-
+    private lateinit var database: CordaPersistence
     private val attachmentCount = metrics.counter("Attachments")
 
-    fun start() {
+    fun start(database: CordaPersistence) {
+        this.database = database
         database.transaction {
             val session = currentDBSession()
             val criteriaBuilder = session.criteriaBuilder
@@ -232,10 +230,9 @@ class NodeAttachmentService(
         }
     }
 
-    private val attachmentCache = NonInvalidatingCache<SecureHash, Optional<Attachment>>(
-            attachmentCacheBound,
-            { key -> Optional.ofNullable(createAttachment(key)) }
-    )
+    private val attachmentCache = NonInvalidatingCache<SecureHash, Optional<Attachment>>(attachmentCacheBound) { key ->
+        Optional.ofNullable(createAttachment(key))
+    }
 
     private fun createAttachment(key: SecureHash): Attachment? {
         val content = attachmentContentCache.get(key)!!
@@ -265,8 +262,10 @@ class NodeAttachmentService(
         return import(jar, uploader, filename)
     }
 
-    override fun hasAttachment(attachmentId: AttachmentId): Boolean = database.transaction {
-        currentDBSession().find(NodeAttachmentService.DBAttachment::class.java, attachmentId.toString()) != null
+    override fun hasAttachment(attachmentId: AttachmentId): Boolean {
+        return database.transaction {
+            currentDBSession().find(NodeAttachmentService.DBAttachment::class.java, attachmentId.toString()) != null
+        }
     }
 
     // TODO: PLT-147: The attachment should be randomised to prevent brute force guessing and thus privacy leaks.

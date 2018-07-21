@@ -3,7 +3,6 @@ package net.corda.node.services.keys
 import net.corda.core.crypto.*
 import net.corda.core.identity.PartyAndCertificate
 import net.corda.core.node.services.IdentityService
-import net.corda.core.node.services.KeyManagementService
 import net.corda.core.serialization.SingletonSerializeAsToken
 import net.corda.core.utilities.MAX_HASH_HEX_SIZE
 import net.corda.node.utilities.AppendOnlyPersistentMap
@@ -26,9 +25,7 @@ import javax.persistence.Lob
  *
  * This class needs database transactions to be in-flight during method calls and init.
  */
-class PersistentKeyManagementService(val identityService: IdentityService,
-                                     initialKeys: Set<KeyPair>,
-                                     private val database: CordaPersistence) : SingletonSerializeAsToken(), KeyManagementService {
+class PersistentKeyManagementService(val identityService: IdentityService) : SingletonSerializeAsToken(), KeyManagementServiceInternal {
 
     @Entity
     @javax.persistence.Table(name = "${NODE_DATABASE_PREFIX}our_key_pairs")
@@ -63,12 +60,13 @@ class PersistentKeyManagementService(val identityService: IdentityService,
         }
     }
 
-    val keysMap = createKeyMap()
+    private lateinit var database: CordaPersistence
+    private val keysMap = createKeyMap()
 
-    init {
-        // TODO this should be in a start function, not in an init block.
+    override fun start(initialKeyPairs: Set<KeyPair>, database: CordaPersistence) {
+        this.database = database
         database.transaction {
-            initialKeys.forEach({ it -> keysMap.addWithDuplicatesAllowed(it.public, it.private) })
+            initialKeyPairs.forEach { keysMap.addWithDuplicatesAllowed(it.public, it.private) }
         }
     }
 

@@ -8,7 +8,6 @@ import net.corda.core.DoNotImplement
 import net.corda.core.crypto.Crypto
 import net.corda.core.crypto.SecureHash
 import net.corda.core.crypto.random63BitValue
-import net.corda.core.identity.AbstractParty
 import net.corda.core.identity.CordaX500Name
 import net.corda.core.identity.Party
 import net.corda.core.identity.PartyAndCertificate
@@ -23,7 +22,6 @@ import net.corda.core.node.NetworkParameters
 import net.corda.core.node.NodeInfo
 import net.corda.core.node.NotaryInfo
 import net.corda.core.node.services.IdentityService
-import net.corda.core.node.services.KeyManagementService
 import net.corda.core.serialization.SerializationWhitelist
 import net.corda.core.utilities.NetworkHostAndPort
 import net.corda.core.utilities.contextLogger
@@ -34,9 +32,9 @@ import net.corda.node.internal.AbstractNode
 import net.corda.node.internal.StartedNode
 import net.corda.node.internal.cordapp.CordappLoader
 import net.corda.node.services.api.NodePropertiesStore
-import net.corda.node.services.api.SchemaService
 import net.corda.node.services.config.*
 import net.corda.node.services.keys.E2ETestKeyManagementService
+import net.corda.node.services.keys.KeyManagementServiceInternal
 import net.corda.node.services.messaging.MessagingService
 import net.corda.node.services.transactions.BFTNonValidatingNotaryService
 import net.corda.node.services.transactions.BFTSMaRt
@@ -255,7 +253,7 @@ open class InternalMockNetwork(private val cordappPackages: List<String> = empty
             return started
         }
 
-        override fun getRxIoScheduler() = CachedThreadScheduler(testThreadFactory()).also { runOnStop += it::shutdown }
+        override val rxIoScheduler get() = CachedThreadScheduler(testThreadFactory()).also { runOnStop += it::shutdown }
         private fun advertiseNodeToNetwork(newNode: StartedNode<MockNode>) {
             mockNet.nodes
                     .mapNotNull { it.started }
@@ -281,8 +279,8 @@ open class InternalMockNetwork(private val cordappPackages: List<String> = empty
             network = messagingServiceSpy
         }
 
-        override fun makeKeyManagementService(identityService: IdentityService, keyPairs: Set<KeyPair>, database: CordaPersistence): KeyManagementService {
-            return E2ETestKeyManagementService(identityService, keyPairs)
+        override fun makeKeyManagementService(identityService: IdentityService): KeyManagementServiceInternal {
+            return E2ETestKeyManagementService(identityService)
         }
 
         override fun startShell() {
@@ -318,10 +316,11 @@ open class InternalMockNetwork(private val cordappPackages: List<String> = empty
         override val serializationWhitelists: List<SerializationWhitelist>
             get() = _serializationWhitelists
         private var dbCloser: (() -> Any?)? = null
-        override fun initialiseDatabasePersistence(schemaService: SchemaService,
-                                                   wellKnownPartyFromX500Name: (CordaX500Name) -> Party?,
-                                                   wellKnownPartyFromAnonymous: (AbstractParty) -> Party?): CordaPersistence {
-            return super.initialiseDatabasePersistence(schemaService, wellKnownPartyFromX500Name, wellKnownPartyFromAnonymous).also { dbCloser = it::close }
+
+        override fun startDatabase() {
+            super.startDatabase()
+            // TODO super already registers a db closer, so what's going on here??
+            dbCloser = database::close
         }
 
         fun disableDBCloseOnStop() {

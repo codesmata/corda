@@ -9,6 +9,7 @@ import net.corda.core.messaging.DataFeed
 import net.corda.core.utilities.Try
 import net.corda.node.services.messaging.DeduplicationHandler
 import net.corda.node.services.messaging.ReceivedMessage
+import net.corda.nodeapi.internal.persistence.CordaPersistence
 import rx.Observable
 
 /**
@@ -32,7 +33,7 @@ interface StateMachineManager {
     /**
      * Starts the state machine manager, loading and starting the state machines in storage.
      */
-    fun start(tokenizableServices: List<Any>)
+    fun start(database: CordaPersistence, tokenizableServices: List<Any>)
 
     /**
      * Stops the state machine manager gracefully, waiting until all but [allowedUnsuspendedFiberCount] flows reach the

@@ -58,7 +58,6 @@ class SingleThreadedStateMachineManager(
         val serviceHub: ServiceHubInternal,
         private val checkpointStorage: CheckpointStorage,
         val executor: ExecutorService,
-        val database: CordaPersistence,
         private val secureRandom: SecureRandom,
         private val unfinishedFibers: ReusableLatch = ReusableLatch(),
         private val classloader: ClassLoader = SingleThreadedStateMachineManager::class.java.classLoader
@@ -88,8 +87,8 @@ class SingleThreadedStateMachineManager(
         val timedFlows = HashMap<StateMachineRunId, ScheduledTimeout>()
     }
 
+    private lateinit var database: CordaPersistence
     override val flowHospital: StaffedFlowHospital = StaffedFlowHospital()
-
     private val mutex = ThreadBox(InnerState())
     private val scheduler = FiberExecutorScheduler("Same thread scheduler", executor)
     private val timeoutScheduler = Executors.newScheduledThreadPool(1)
@@ -120,7 +119,8 @@ class SingleThreadedStateMachineManager(
      */
     override val changes: Observable<StateMachineManager.Change> = mutex.content.changesPublisher
 
-    override fun start(tokenizableServices: List<Any>) {
+    override fun start(database: CordaPersistence, tokenizableServices: List<Any>) {
+        this.database = database
         checkQuasarJavaAgentPresence()
         val checkpointSerializationContext = SerializationDefaults.CHECKPOINT_CONTEXT.withTokenContext(
                 SerializeAsTokenContextImpl(tokenizableServices, SerializationDefaults.SERIALIZATION_FACTORY, SerializationDefaults.CHECKPOINT_CONTEXT, serviceHub)

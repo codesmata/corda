@@ -30,7 +30,7 @@ typealias TxCacheValue = Pair<SerializedBytes<CoreTransaction>, List<Transaction
 fun TxCacheValue.toSignedTx() = SignedTransaction(this.first, this.second)
 fun SignedTransaction.toTxCacheValue() = TxCacheValue(this.txBits, this.sigs)
 
-class DBTransactionStorage(cacheSizeBytes: Long, private val database: CordaPersistence) : WritableTransactionStorage, SingletonSerializeAsToken() {
+class DBTransactionStorage(cacheSizeBytes: Long) : WritableTransactionStorage, SingletonSerializeAsToken() {
 
     @Entity
     @Table(name = "${NODE_DATABASE_PREFIX}transactions")
@@ -72,28 +72,32 @@ class DBTransactionStorage(cacheSizeBytes: Long, private val database: CordaPers
         private const val transactionSignatureOverheadEstimate = 1024
 
         private fun weighTx(tx: AppendOnlyPersistentMapBase.Transactional<TxCacheValue>): Int {
-            val actTx = tx.valueWithoutIsolation
-            if (actTx == null) {
-                return 0
-            }
+            val actTx = tx.valueWithoutIsolation ?: return 0
             return actTx.second.sumBy { it.size + transactionSignatureOverheadEstimate } + actTx.first.size
         }
     }
 
     private val txStorage = ThreadBox(createTransactionsMap(cacheSizeBytes))
+    private val updatesPublisher = PublishSubject.create<SignedTransaction>().toSerialized()
+    override val updates: Observable<SignedTransaction> = updatesPublisher.wrapWithDatabaseTransaction()
 
-    override fun addTransaction(transaction: SignedTransaction): Boolean = database.transaction {
-        txStorage.locked {
-            addWithDuplicatesAllowed(transaction.id, transaction.toTxCacheValue()).apply {
-                updatesPublisher.bufferUntilDatabaseCommit().onNext(transaction)
+    private lateinit var database: CordaPersistence
+
+    override fun start(database: CordaPersistence) {
+        this.database = database
+    }
+
+    override fun addTransaction(transaction: SignedTransaction): Boolean {
+        return database.transaction {
+            txStorage.locked {
+                addWithDuplicatesAllowed(transaction.id, transaction.toTxCacheValue()).apply {
+                    updatesPublisher.bufferUntilDatabaseCommit().onNext(transaction)
+                }
             }
         }
     }
 
     override fun getTransaction(id: SecureHash): SignedTransaction? = database.transaction { txStorage.content[id]?.toSignedTx() }
-
-    private val updatesPublisher = PublishSubject.create<SignedTransaction>().toSerialized()
-    override val updates: Observable<SignedTransaction> = updatesPublisher.wrapWithDatabaseTransaction()
 
     override fun track(): DataFeed<List<SignedTransaction>, SignedTransaction> {
         return database.transaction {

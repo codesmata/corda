@@ -3,13 +3,12 @@ package net.corda.node.internal
 import com.codahale.metrics.JmxReporter
 import net.corda.client.rpc.internal.serialization.amqp.AMQPClientSerializationScheme
 import net.corda.core.concurrent.CordaFuture
-import net.corda.core.identity.AbstractParty
 import net.corda.core.identity.CordaX500Name
-import net.corda.core.identity.Party
 import net.corda.core.internal.Emoji
 import net.corda.core.internal.concurrent.openFuture
 import net.corda.core.internal.concurrent.thenMatch
 import net.corda.core.internal.div
+import net.corda.core.internal.errors.AddressBindingException
 import net.corda.core.internal.uncheckedCast
 import net.corda.core.messaging.RPCOps
 import net.corda.core.node.NetworkParameters
@@ -26,7 +25,6 @@ import net.corda.node.VersionInfo
 import net.corda.node.internal.artemis.ArtemisBroker
 import net.corda.node.internal.artemis.BrokerAddresses
 import net.corda.node.internal.cordapp.CordappLoader
-import net.corda.core.internal.errors.AddressBindingException
 import net.corda.node.internal.security.RPCSecurityManagerImpl
 import net.corda.node.internal.security.RPCSecurityManagerWithAdditionalUser
 import net.corda.node.serialization.amqp.AMQPServerSerializationScheme
@@ -34,16 +32,11 @@ import net.corda.node.serialization.kryo.KRYO_CHECKPOINT_CONTEXT
 import net.corda.node.serialization.kryo.KryoServerSerializationScheme
 import net.corda.node.services.Permissions
 import net.corda.node.services.api.NodePropertiesStore
-import net.corda.node.services.api.SchemaService
 import net.corda.node.services.config.NodeConfiguration
 import net.corda.node.services.config.SecurityConfiguration
 import net.corda.node.services.config.shouldInitCrashShell
 import net.corda.node.services.config.shouldStartLocalShell
-import net.corda.node.services.messaging.ArtemisMessagingServer
-import net.corda.node.services.messaging.InternalRPCMessagingClient
-import net.corda.node.services.messaging.MessagingService
-import net.corda.node.services.messaging.P2PMessagingClient
-import net.corda.node.services.messaging.RPCServerConfiguration
+import net.corda.node.services.messaging.*
 import net.corda.node.services.rpc.ArtemisRpcBroker
 import net.corda.node.services.transactions.InMemoryTransactionVerifierService
 import net.corda.node.utilities.AddressUtils
@@ -56,11 +49,7 @@ import net.corda.nodeapi.internal.bridging.BridgeControlListener
 import net.corda.nodeapi.internal.config.User
 import net.corda.nodeapi.internal.crypto.X509Utilities
 import net.corda.nodeapi.internal.persistence.CordaPersistence
-import net.corda.serialization.internal.AMQP_P2P_CONTEXT
-import net.corda.serialization.internal.AMQP_RPC_CLIENT_CONTEXT
-import net.corda.serialization.internal.AMQP_RPC_SERVER_CONTEXT
-import net.corda.serialization.internal.AMQP_STORAGE_CONTEXT
-import net.corda.serialization.internal.SerializationFactoryImpl
+import net.corda.serialization.internal.*
 import org.h2.jdbc.JdbcSQLException
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -321,9 +310,7 @@ open class Node(configuration: NodeConfiguration,
      * This is not using the H2 "automatic mixed mode" directly but leans on many of the underpinnings.  For more details
      * on H2 URLs and configuration see: http://www.h2database.com/html/features.html#database_url
      */
-    override fun initialiseDatabasePersistence(schemaService: SchemaService,
-                                               wellKnownPartyFromX500Name: (CordaX500Name) -> Party?,
-                                               wellKnownPartyFromAnonymous: (AbstractParty) -> Party?): CordaPersistence {
+    override fun startDatabase() {
         val databaseUrl = configuration.dataSourceProperties.getProperty("dataSource.url")
         val h2Prefix = "jdbc:h2:file:"
 
@@ -352,7 +339,8 @@ open class Node(configuration: NodeConfiguration,
                 printBasicNodeInfo("Database connection url is", "jdbc:h2:$url/node")
             }
         }
-        return super.initialiseDatabasePersistence(schemaService, wellKnownPartyFromX500Name, wellKnownPartyFromAnonymous)
+
+        super.startDatabase()
     }
 
     private val _startupComplete = openFuture<Unit>()
@@ -393,7 +381,7 @@ open class Node(configuration: NodeConfiguration,
         return started
     }
 
-    override fun getRxIoScheduler(): Scheduler = Schedulers.io()
+    override val rxIoScheduler: Scheduler get() = Schedulers.io()
 
     private fun initialiseSerialization() {
         if (!initialiseSerialization) return

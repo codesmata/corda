@@ -49,7 +49,6 @@ var contextDatabase: CordaPersistence
 val contextDatabaseOrNull: CordaPersistence? get() = _contextDatabase.get()
 
 class CordaPersistence(
-        val dataSource: DataSource,
         databaseConfig: DatabaseConfig,
         schemas: Set<MappedSchema>,
         attributeConverters: Collection<AttributeConverter<*, *>> = emptySet()
@@ -57,6 +56,8 @@ class CordaPersistence(
     companion object {
         private val log = contextLogger()
     }
+
+    data class Boundary(val txId: UUID, val success: Boolean)
 
     private val defaultIsolationLevel = databaseConfig.transactionIsolationLevel
     val hibernateConfig: HibernateConfiguration by lazy {
@@ -66,9 +67,11 @@ class CordaPersistence(
     }
     val entityManagerFactory get() = hibernateConfig.sessionFactoryForRegisteredSchemas
 
-    data class Boundary(val txId: UUID, val success: Boolean)
+    private var _dataSource: DataSource? = null
+    val dataSource: DataSource get() = checkNotNull(_dataSource) { "CordaPersistence Not started" }
 
-    init {
+    fun start(dataSource: DataSource) {
+        _dataSource = dataSource
         // Found a unit test that was forgetting to close the database transactions.  When you close() on the top level
         // database transaction it will reset the threadLocalTx back to null, so if it isn't then there is still a
         // database transaction open.  The [transaction] helper above handles this in a finally clause for you
@@ -80,7 +83,6 @@ class CordaPersistence(
         // Check not in read-only mode.
         transaction {
             check(!connection.metaData.isReadOnly) { "Database should not be readonly." }
-
             checkCorrectAttachmentsContractsTableName(connection)
         }
     }
@@ -173,7 +175,7 @@ class CordaPersistence(
 
     override fun close() {
         // DataSource doesn't implement AutoCloseable so we just have to hope that the implementation does so that we can close it
-        (dataSource as? AutoCloseable)?.close()
+        (_dataSource as? AutoCloseable)?.close()
     }
 }
 

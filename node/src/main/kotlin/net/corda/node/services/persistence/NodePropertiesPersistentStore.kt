@@ -1,7 +1,7 @@
 package net.corda.node.services.persistence
 
+import net.corda.core.utilities.contextLogger
 import net.corda.core.utilities.debug
-import net.corda.core.utilities.loggerFor
 import net.corda.node.services.api.NodePropertiesStore
 import net.corda.node.services.api.NodePropertiesStore.FlowsDrainingModeOperations
 import net.corda.node.utilities.PersistentMap
@@ -17,13 +17,17 @@ import javax.persistence.Table
 /**
  * Simple node properties key value store in DB.
  */
-class NodePropertiesPersistentStore(readPhysicalNodeId: () -> String, persistence: CordaPersistence) : NodePropertiesStore {
-
+class NodePropertiesPersistentStore(private val readPhysicalNodeId: () -> String) : NodePropertiesStore {
     private companion object {
-        val logger = loggerFor<NodePropertiesStore>()
+        val logger = contextLogger()
     }
 
-    override val flowsDrainingMode: FlowsDrainingModeOperations = FlowsDrainingModeOperationsImpl(readPhysicalNodeId, persistence, logger)
+    private lateinit var _flowsDrainingMode: FlowsDrainingModeOperations
+    override val flowsDrainingMode: FlowsDrainingModeOperations get() = _flowsDrainingMode
+
+    fun start(database: CordaPersistence) {
+        _flowsDrainingMode = FlowsDrainingModeOperationsImpl(readPhysicalNodeId, database, logger)
+    }
 
     @Entity
     @Table(name = "${NODE_DATABASE_PREFIX}properties")
